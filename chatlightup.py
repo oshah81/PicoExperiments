@@ -157,7 +157,7 @@ def get_led_pattern(ssid, password, colour : str) -> list[bool]:
         # raise ConnectionError("Unable to connect.")
         response = urequests.get(f"https://raw.githubusercontent.com/oshah81/PicoExperiments/main/ledpattern{colour}.txt")
         pattern_str = response.text
-        print("pattern {colour} obtained. Disconnecting wifi")
+        print(f"pattern {colour} obtained. Disconnecting wifi")
         wifi.active(False)
     except Exception as e:
         print(e)
