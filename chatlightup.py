@@ -18,7 +18,7 @@ GRID_3D = [[17, 16, 0, 1],
            [26, 22, 28, 27]]
 
 # Main program
-def program(WIFI_SSID, WIFI_PASSWORD, COLOUR):
+def program(WIFI_SSID, WIFI_PASSWORD, COLOUR) -> None:
 
     try:
         # Main program
@@ -37,7 +37,7 @@ def program(WIFI_SSID, WIFI_PASSWORD, COLOUR):
         onboard.on()
         raise e
 
-def init_layers():
+def init_layers() -> None:
     onboard = machine.Pin("LED", machine.Pin.OUT)
     onboard.off()
 
@@ -49,25 +49,25 @@ def init_layers():
             machine.Pin(GRID_3D[x][z], machine.Pin.OUT)
 
 
-def enable_layer(layer):
+def enable_layer(layer: int) -> None:
     a = machine.Pin(LAYER[layer])
     a.on()
 
-def disable_layer(layer):
+def disable_layer(layer: int) -> None:
     a = machine.Pin(LAYER[layer])
     a.off()
 
-def light_on(y, x, z):
+def light_on(y: int, x: int, z: int) -> None:
     enable_layer(y)
     a = machine.Pin(GRID_3D[x][z])
     a.on()
     
-def light_off(y, x, z):
+def light_off(y: int, x: int, z: int) -> None:
     enable_layer(y)
     a = machine.Pin(GRID_3D[x][z])
     a.off()
 
-def clear_leds():
+def clear_leds() -> None:
     
     for x in range(4):
         for z in range(4):
@@ -76,7 +76,7 @@ def clear_leds():
             sleep(0)
 
 # Connect to the Wi-Fi network
-def connect_to_wifi(ssid: str, pwd: str):
+def connect_to_wifi(ssid: str, pwd: str) -> network.WLAN:
     retries = 10
     wifi = network.WLAN(network.STA_IF)
     wifi.active(True)
@@ -84,10 +84,11 @@ def connect_to_wifi(ssid: str, pwd: str):
     isConnected = False
     wifi.connect(ssid, pwd)
     while True:
+        print("wifi connecting")
         retries -= 1
         isConnected = wifi.isconnected()
         if isConnected:
-            return
+            return wifi
         if retries <= 0:
             break
         sleep(0.5)
@@ -136,6 +137,8 @@ def process_pattern_txt(pattern: str) -> list[bool]:
             col = []
             continue
  
+    if len(col) > 0:
+        depth.append(col)
     if len(depth) > 0:
         row.append(depth)
 
@@ -147,14 +150,18 @@ def get_led_pattern(ssid, password, colour : str) -> list[bool]:
     pattern_str = """0000 0000 0000 0000  0000 0000 0000 0000  0000 0000 0000 0000  0000 0000 0000 0000
 1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111
 1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010
-0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101"""
+0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  """
 
     try:
-        connect_to_wifi(ssid, password)
+        wifi = connect_to_wifi(ssid, password)
         # raise ConnectionError("Unable to connect.")
-        with urequests.get(f"https://github.com/oshah81/led_pattern{colour}.json") as response:
-            pattern_str = response.text
-    except:
+        response = urequests.get(f"https://raw.githubusercontent.com/oshah81/PicoExperiments/main/ledpattern{colour}.txt")
+        pattern_str = response.text
+        print("pattern {colour} obtained. Disconnecting wifi")
+        wifi.active(False)
+    except Exception as e:
+        print(e)
+        print("pattern not obtained. using fallback pattern")
         pass
 
     pattern = process_pattern_txt(pattern_str)
@@ -166,16 +173,13 @@ def light_up_leds(pattern: list[bool]) -> None:
     for x in range(4):
         for y in range(4):
             for z in range(4):
-                # print(f"({x}, {y}, {z}) is {len(pattern[x][y])}")
+                # print(f"({x}, {y}, {z}) is {pattern[x][y]}")
                 switched = pattern[x][y][z]
                 if not switched:
                     light_off(x, y, z)
                 else:
                     light_on(x, y, z)
 
-
     # Update the LEDs
     return
-
-# Start the program
 
