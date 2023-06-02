@@ -6,6 +6,7 @@ from time import sleep
 import urequests
 import network
 import socket
+import rp2
 
 
 #layers
@@ -43,12 +44,22 @@ def program(WIFI_SSID, WIFI_PASSWORD, COLOUR) -> None:
 
 
 def prog_loop(led_pattern: str, sckt: socket.socket) -> None:
+    time_delta = 0.01
+    current_time = 0
+    sckt.settimeout(time_delta)
+
     while True:
         for frame in led_pattern:
-            light_up_leds(frame)
-            restartFlag = read_socket(sckt, 0.02)
+            # time will mostly be spend here
+            restartFlag = read_socket(sckt)
+
             if restartFlag:
                 return
+            current_time += time_delta
+            if (current_time > 0.25):
+                # Update LEDs
+                light_up_leds(frame)
+                current_time = 0
 
 
 def init_layers() -> None:
@@ -93,6 +104,7 @@ def clear_leds() -> None:
 def connect_to_wifi(ssid: str, pwd: str) -> network.WLAN:
     retries = 10
     wifi = network.WLAN(network.STA_IF)
+    rp2.country('GB')
     wifi.active(True)
 
     isConnected = False
@@ -118,9 +130,8 @@ def tcpip_port(wifi: network.WLAN) -> socket.socket:
 
     return connection
 
-def read_socket(sckt: socket.socket, timeout: int) -> bool:
+def read_socket(sckt: socket.socket) -> bool:
     try:
-        sckt.settimeout(timeout)
         retBytes = sckt.recv(1024)
         retStr = retBytes.decode()
         if retStr.startswith("1"):
