@@ -1,5 +1,6 @@
 # License: MIT
 # Credit: https://github.com/oshah81/
+# version 20230602
 
 import machine
 from time import sleep_ms
@@ -226,7 +227,8 @@ def get_led_pattern(colour : str) -> list[bool]:
         pass
 
     pattern = process_pattern_txt(pattern_str)
-    print(f"pattern is {json.dumps(pattern)}")
+    parsed_pattern = json.dumps(pattern).replace("],", "],\n")
+    print(f"pattern is {parsed_pattern}")
     return pattern
 
 # Function to light up LEDs based on the pattern
@@ -244,6 +246,5 @@ def light_up_leds(pattern: list[bool]) -> None:
 
     # Update the LEDs
     return
-
 
 
