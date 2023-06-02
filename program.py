@@ -2,11 +2,13 @@
 # Credit: https://github.com/oshah81/
 
 import machine
-from time import sleep
+from time import sleep_ms
 import urequests
 import network
 import socket
 import rp2
+import errno
+import json
 
 
 #layers
@@ -26,17 +28,17 @@ def program(WIFI_SSID, WIFI_PASSWORD, COLOUR) -> None:
             # Main program
             wifi = connect_to_wifi(WIFI_SSID, WIFI_PASSWORD)
 
-            led_pattern = get_led_pattern(WIFI_SSID, WIFI_PASSWORD, COLOUR)
+            led_pattern = get_led_pattern(COLOUR)
 
             init_layers()
 
             clear_leds()
-            with tcpip_port(wifi) as sckt:
-                prog_loop(led_pattern, sckt)
+            sckt = tcpip_port(wifi)
+            prog_loop(led_pattern, sckt)
 
-
+            sckt.close()
             wifi.active(False)
-            print("Reset received. Restarting program")
+            print("End of program. Restarting")
     except Exception as e:
         onboard = machine.Pin("LED", machine.Pin.OUT)
         onboard.on()
@@ -44,22 +46,24 @@ def program(WIFI_SSID, WIFI_PASSWORD, COLOUR) -> None:
 
 
 def prog_loop(led_pattern: str, sckt: socket.socket) -> None:
-    time_delta = 0.01
+    time_delta = 10
     current_time = 0
-    sckt.settimeout(time_delta)
+    led_time = 0
 
-    while True:
+    while current_time < 3_600_000:
         for frame in led_pattern:
             # time will mostly be spend here
             restartFlag = read_socket(sckt)
+            # Always restart after an hour
 
             if restartFlag:
                 return
+            sleep_ms(time_delta)
             current_time += time_delta
-            if (current_time > 0.25):
+            if (current_time - led_time > 250):
                 # Update LEDs
+                led_time += 250
                 light_up_leds(frame)
-                current_time = 0
 
 
 def init_layers() -> None:
@@ -98,7 +102,7 @@ def clear_leds() -> None:
         for z in range(4):
             a = machine.Pin(GRID_3D[x][z])
             a.off()
-            sleep(0)
+            sleep_ms(0)
 
 # Connect to the Wi-Fi network
 def connect_to_wifi(ssid: str, pwd: str) -> network.WLAN:
@@ -117,15 +121,15 @@ def connect_to_wifi(ssid: str, pwd: str) -> network.WLAN:
             return wifi
         if retries <= 0:
             break
-        sleep(0.5)
+        sleep_ms(500)
 
     raise ConnectionError("wifi not connected")
 
 def tcpip_port(wifi: network.WLAN) -> socket.socket:
-    ip = wifi.ifconfig()[0]
-    connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    connection.settimeout(0.1)
-    connection.bind(ip, 2028)
+    connection = socket.socket()
+    connection.setblocking(False)
+    addr = socket.getaddrinfo("0.0.0.0", 2028)[0][-1]
+    connection.bind(addr)
     connection.listen(1)
 
     return connection
@@ -142,8 +146,16 @@ def read_socket(sckt: socket.socket) -> bool:
                 print("socket terminated before could send ack frame")
             return True
 
-    except socket.timeout as e:
-        return False
+    # Backcompat hack for handling timeouts in micropython
+    except OSError as e:
+        if e.errno in [errno.ETIMEDOUT, errno.EAGAIN]:
+            return False
+        raise e
+
+    # # This is the proper way for handling timeouts:
+    # 
+    # except TimeoutError as e:
+    #    return False
 
     # rogue data. Return false
     return False
@@ -200,22 +212,21 @@ def process_pattern_txt(pattern: str) -> list[bool]:
 
 # Function to retrieve the LED pattern from a web server
 def get_led_pattern(colour : str) -> list[bool]:
-    pattern_str = """0000 0000 0000 0000  0000 0000 0000 0000  0000 0000 0000 0000  0000 0000 0000 0000
-1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111
-1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010
+    pattern_str = """1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010
 0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  """
 
     try:
         # raise ConnectionError("Unable to connect.")
         response = urequests.get(f"https://raw.githubusercontent.com/oshah81/PicoExperiments/main/ledpattern{colour}.txt")
         pattern_str = response.text
-        print(f"pattern {colour} obtained. Disconnecting wifi")
+        print(f"pattern {colour} obtained.")
     except Exception as e:
         print(e)
         print("pattern not obtained. using fallback pattern")
         pass
 
     pattern = process_pattern_txt(pattern_str)
+    print(f"pattern is {json.dumps(pattern)}")
     return pattern
 
 # Function to light up LEDs based on the pattern
@@ -233,4 +244,6 @@ def light_up_leds(pattern: list[bool]) -> None:
 
     # Update the LEDs
     return
+
+
 
