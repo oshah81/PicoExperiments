@@ -213,11 +213,10 @@ def process_pattern_txt(pattern: str) -> list[bool]:
 
 # Function to retrieve the LED pattern from a web server
 def get_led_pattern(colour : str) -> list[bool]:
-    pattern_str = """1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010
-0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  """
+    pattern_str = """1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111  """
 
     try:
-        # raise ConnectionError("Unable to connect.")
+        # raise OSError("Unable to connect.")
         response = urequests.get(f"https://raw.githubusercontent.com/oshah81/PicoExperiments/main/ledpattern{colour}.txt")
         pattern_str = response.text
         print(f"pattern {colour} obtained.")
@@ -227,7 +226,7 @@ def get_led_pattern(colour : str) -> list[bool]:
         pass
 
     pattern = process_pattern_txt(pattern_str)
-    parsed_pattern = json.dumps(pattern).replace("],", "],\n")
+    parsed_pattern = json.dumps(pattern).replace("]", "]\n")
     print(f"pattern is {parsed_pattern}")
     return pattern
 
