@@ -3,9 +3,9 @@
 
 import machine
 from time import sleep
-import math
 import urequests
 import network
+import socket
 
 
 #layers
@@ -21,21 +21,35 @@ GRID_3D = [[17, 16, 0, 1],
 def program(WIFI_SSID, WIFI_PASSWORD, COLOUR) -> None:
 
     try:
-        # Main program
-
-        led_pattern = get_led_pattern(WIFI_SSID, WIFI_PASSWORD, COLOUR)
-
-        init_layers()
-
-        clear_leds()
         while True:
-            for frame in led_pattern:
-                light_up_leds(frame)
-                sleep(0.25)  # Wait for 0.5 second
+            # Main program
+            wifi = connect_to_wifi(WIFI_SSID, WIFI_PASSWORD)
+
+            led_pattern = get_led_pattern(WIFI_SSID, WIFI_PASSWORD, COLOUR)
+
+            init_layers()
+
+            clear_leds()
+            with tcpip_port(wifi) as sckt:
+                prog_loop(led_pattern, sckt)
+
+
+            wifi.active(False)
+            print("Reset received. Restarting program")
     except Exception as e:
         onboard = machine.Pin("LED", machine.Pin.OUT)
         onboard.on()
         raise e
+
+
+def prog_loop(led_pattern: str, sckt: socket.socket) -> None:
+    while True:
+        for frame in led_pattern:
+            light_up_leds(frame)
+            restartFlag = read_socket(sckt, 0.02)
+            if restartFlag:
+                return
+
 
 def init_layers() -> None:
     onboard = machine.Pin("LED", machine.Pin.OUT)
@@ -95,6 +109,34 @@ def connect_to_wifi(ssid: str, pwd: str) -> network.WLAN:
 
     raise ConnectionError("wifi not connected")
 
+def tcpip_port(wifi: network.WLAN) -> socket.socket:
+    ip = wifi.ifconfig()[0]
+    connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connection.settimeout(0.1)
+    connection.bind(ip, 2028)
+    connection.listen(1)
+
+    return connection
+
+def read_socket(sckt: socket.socket, timeout: int) -> bool:
+    try:
+        sckt.settimeout(timeout)
+        retBytes = sckt.recv(1024)
+        retStr = retBytes.decode()
+        if retStr.startswith("1"):
+            try:
+                # send an ack packet
+                sckt.send(b'c')
+            except Exception as e1:
+                print("socket terminated before could send ack frame")
+            return True
+
+    except socket.timeout as e:
+        return False
+
+    # rogue data. Return false
+    return False
+
 # Turns a plain text string into a pattern string suitable for light_up_leds
 def process_pattern_txt(pattern: str) -> list[bool]:
     flag = False
@@ -146,19 +188,17 @@ def process_pattern_txt(pattern: str) -> list[bool]:
     return frame
 
 # Function to retrieve the LED pattern from a web server
-def get_led_pattern(ssid, password, colour : str) -> list[bool]:
+def get_led_pattern(colour : str) -> list[bool]:
     pattern_str = """0000 0000 0000 0000  0000 0000 0000 0000  0000 0000 0000 0000  0000 0000 0000 0000
 1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111
 1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010  1010 1010 1010 1010
 0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  0101 0101 0101 0101  """
 
     try:
-        wifi = connect_to_wifi(ssid, password)
         # raise ConnectionError("Unable to connect.")
         response = urequests.get(f"https://raw.githubusercontent.com/oshah81/PicoExperiments/main/ledpattern{colour}.txt")
         pattern_str = response.text
         print(f"pattern {colour} obtained. Disconnecting wifi")
-        wifi.active(False)
     except Exception as e:
         print(e)
         print("pattern not obtained. using fallback pattern")
