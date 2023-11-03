@@ -7,9 +7,7 @@ from time import sleep_ms, localtime
 import ntptime
 import urequests
 import network
-import socket
 import rp2
-import errno
 import micropython
 
 sckt = None
@@ -73,6 +71,7 @@ def program(WIFI_SSID, WIFI_PASSWORD, COLOUR) -> None:
     return
 
 def synctime() -> None:
+    print("Attempting to sync time")
     ntptime.host = "raspberrypi.local"
     ntptime.timeout = 1
     ntptime.settime()
@@ -116,6 +115,7 @@ def connect_to_wifi(ssid: str, pwd: str) -> network.WLAN:
         retries -= 1
         isConnected = wifi.isconnected()
         if isConnected:
+            print("wifi successfully connected")
             return wifi
         if retries <= 0:
             break
