@@ -7,6 +7,8 @@ from time import sleep_ms
 import urequests
 import json
 
+# Requires Python 3.12
+# type LEDArray = list[list[list[bool]]]
 
 #layers
 LAYER = [9,8,7,6]
@@ -21,15 +23,15 @@ GRID_3D = [[17, 16, 0, 1],
 def innerprogram(COLOUR :str, endFlagger) -> None:
 
     # Main program
-    led_pattern = get_led_pattern(COLOUR)
-
     init_layers()
-
     clear_leds()
+
+    led_pattern = get_led_pattern(COLOUR)
     prog_loop(led_pattern, endFlagger)
+    clear_leds()
 
 
-def prog_loop(led_pattern: str, endFlagger) -> None:
+def prog_loop(led_pattern: list[list[list[list[bool]]]], endFlagger) -> None:
     time_delta = 10
     current_time = 0
     led_time = 0
@@ -39,7 +41,7 @@ def prog_loop(led_pattern: str, endFlagger) -> None:
             # Always restart after an hour
             sleep_ms(time_delta)
             if endFlagger():
-                break
+                return
             current_time += time_delta
             if (current_time - led_time > 250):
                 # Update LEDs
@@ -86,7 +88,7 @@ def clear_leds() -> None:
             sleep_ms(0)
 
 # Turns a plain text string into a pattern string suitable for light_up_leds
-def process_pattern_txt(pattern: str) -> list[bool]:
+def process_pattern_txt(pattern: str) -> list[list[list[list[bool]]]]:
     flag = False
     frame = []
     row = []
@@ -136,7 +138,7 @@ def process_pattern_txt(pattern: str) -> list[bool]:
     return frame
 
 # Function to retrieve the LED pattern from a web server
-def get_led_pattern(colour : str) -> list[bool]:
+def get_led_pattern(colour : str) -> list[list[list[list[bool]]]]:
     pattern_str = """1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111
 1111 1111 1111 1111  1111 1111 1111 1111  1111 1111 1111 1111  """
 
@@ -156,7 +158,7 @@ def get_led_pattern(colour : str) -> list[bool]:
     return pattern
 
 # Function to light up LEDs based on the pattern
-def light_up_leds(pattern: list[bool]) -> None:
+def light_up_leds(pattern: list[list[list[bool]]]) -> None:
 
     for x in range(4):
         for y in range(4):
