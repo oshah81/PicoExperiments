@@ -1,2 +1,5 @@
 # ignore ignore
 ignore/
+.picowgo
+.vscode
+main.py
