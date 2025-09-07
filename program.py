@@ -1,43 +1,42 @@
 # License: MIT
 # Credit: https://github.com/oshah81/
-# version 20230704
+# version 20240703
 
 import machine
-from time import sleep_ms, localtime
+from time import sleep_ms
 import ntptime
-import urequests
+import requests
 import network
 import rp2
 import micropython
+import socket
+import struct
+import sys
 
-sckt = None
 EndFlag = False
-
-
 
 # Main program
 def program(WIFI_SSID, WIFI_PASSWORD, COLOUR) -> None:
     global EndFlag
     EndFlag = False
-    NightTime = False
     micropython.alloc_emergency_exception_buf(100)
     bootsel_timer = machine.Timer(-1)
+    onboard = machine.Pin("LED", machine.Pin.OUT)
+
     try:
         wifi = None
         try:
             bootsel_timer.init(period = 1000, mode = machine.Timer.PERIODIC, callback = bootsel_callback_entry)
+            onboard.off()
 
             # Main program
             wifi = connect_to_wifi(WIFI_SSID, WIFI_PASSWORD)
+            gatewayip = debugnetwork(wifi)
 
-            synctime()
+            script = get_script(COLOUR, gatewayip)
 
-            NightTime = is_night_time(localtime()[3], COLOUR)
-            if not NightTime:
-                script = get_script(COLOUR)
-
-                run_script(script, COLOUR, lambda: EndFlag)
-                print("End of program. Restarting")
+            run_script(script, COLOUR, lambda: EndFlag)
+            print("End of program. Restarting")
         finally:
             if (wifi is not None):
                 print("disconnecting wifi")
@@ -49,50 +48,38 @@ def program(WIFI_SSID, WIFI_PASSWORD, COLOUR) -> None:
                     pass
                 print("disconnected")
 
-            if NightTime:
-                print("Night mode. Sleeping for half an hour")
-                wait_until(1000, 1_800_000)
-
-            try:
-                print("deiniting bootsel timer")
-                bootsel_timer.deinit()
-            except:
-                pass
     except Exception as e:
-        print(e)
-        onboard = machine.Pin("LED", machine.Pin.OUT)
+        print(f"{type(e)} occurred, {e}.")
+        sys.print_exception(e)
         onboard.on()
-        while rp2.bootsel_button() != 1:
-            sleep_ms(250)
+        wait_until(2000, 1_800_000)
         sleep_ms(1000)
 
+    try:
+        print("deiniting bootsel timer")
+        bootsel_timer.deinit()
+    except:
+        pass
     print("resetting machine")
     machine.soft_reset()
     return
 
-def synctime() -> None:
-    print("Attempting to sync time")
-    ntptime.host = "raspberrypi.local"
-    ntptime.timeout = 1
-    ntptime.settime()
 
 def wait_until(poll_time: int, timeout: int) -> None:
-    # todo, poll EndFlag 
-    sleep_ms(timeout)
-
-def is_night_time(utc_hour: int, colour: str) -> bool:
-    if (colour == "C3"):
-        return (utc_hour >= 21 or utc_hour <= 8)
-    else:
-        return (utc_hour >= 22 or utc_hour <= 7)
-
+    global EndFlag
+    nchecks = timeout // poll_time
+    while (nchecks > 0):
+        sleep_ms(poll_time)
+        if (EndFlag):
+            return
+        nchecks -= 1
 
 # Function to retrieve the LED pattern from a web server
-def get_script(colour : str) -> str:
+def get_script(colour : str, gatewayip : str) -> str:
     print("retrieving script")
-    response = urequests.get(f"https://raspberrypi.local/pico/ledscript{colour}.txt")
+    response = requests.get(f"https://pi.hole/pico/ledscript{colour}.txt")
     script = response.text
-    print(f"script {colour}, {len(script)} bytes.")
+    print(f"gateway {gatewayip}, script {colour}, {len(script)} bytes.")
 
     return script
 
@@ -115,7 +102,9 @@ def connect_to_wifi(ssid: str, pwd: str) -> network.WLAN:
         retries -= 1
         isConnected = wifi.isconnected()
         if isConnected:
-            print("wifi successfully connected")
+            print("wifi connected")
+            wifi.config(pm=network.WLAN.PM_POWERSAVE)
+            print("wifi successfully configured")
             return wifi
         if retries <= 0:
             break
@@ -123,6 +112,14 @@ def connect_to_wifi(ssid: str, pwd: str) -> network.WLAN:
 
     raise Exception("wifi not connected")
 
+def debugnetwork(wifi)-> str:
+    ipaddr: str
+    subnet : str
+    gateway : str
+    dns : str
+    ipaddr, subnet, gateway, dns = wifi.ifconfig()
+    print(f"Network info {ipaddr}, {subnet}, {gateway}, {dns}")
+    return gateway
 
 # implements bootsel reset button functionality
 def bootsel_callback(instringing: str) -> None:

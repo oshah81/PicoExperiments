@@ -10,6 +10,12 @@
 	],
 	"settings": {
 		"python.languageServer": "Pylance",
-		"picowgo.syncFolder": ""
+		"micropico.syncFolder": "",
+		"python.analysis.typeshedPaths": [
+			"~/.micropico-stubs/included"
+		],
+		"python.analysis.extraPaths": [
+			"~/.micropico-stubs/included"
+		]
 	}
 }
